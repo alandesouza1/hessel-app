@@ -1,5 +1,6 @@
 import streamlit as st
 import gspread
+import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Autenticação com a API do Google Sheets
@@ -20,7 +21,7 @@ def carregar_dados():
     vinculos = pd.DataFrame(vinculos_sheet.get_all_records())
     return pacientes, profissionais, vinculos
 
-pacientes, profissionais, vinculos = carregar_dados()
+pacientes_df, profissionais_df, vinculos_df = carregar_dados()
 
 # Função para salvar os dados na planilha
 def salvar_paciente(paciente):
@@ -53,7 +54,7 @@ if menu == "Cadastrar Paciente":
     contato_resp = st.text_input("Contato do Responsável")
     operacao = st.selectbox("Operação", ["Labi", "AssistCare", "Outra"])
 
-    profissionais = st.multiselect("Profissionais Responsáveis", profissionais["Nome Completo"].tolist())
+    profissionais = st.multiselect("Profissionais Responsáveis", profissionais_df["Nome Completo"].tolist())
 
     if st.button("Salvar Paciente"):
         novo_paciente = {
@@ -67,19 +68,6 @@ if menu == "Cadastrar Paciente":
         }
         salvar_paciente(novo_paciente)
 
-        # Atualiza os profissionais com o novo paciente
-        for prof in profissionais:
-            idx = profissionais[profissionais["Nome Completo"] == prof].index
-            if not idx.empty:
-                atual = profissionais.at[idx[0], "Pacientes"]
-                if isinstance(atual, str):
-                    atual = atual.split(", ")
-                atual.append(nome)
-                profissionais.at[idx[0], "Pacientes"] = ", ".join(atual)
-        # Salva novamente os dados dos profissionais na planilha
-        for prof in profissionais:
-            salvar_profissional(profissionais.loc[profissionais["Nome Completo"] == prof].iloc[0].to_dict())
-
 # Cadastro de Profissional
 elif menu == "Cadastrar Profissional":
     st.subheader("Cadastro de Profissional")
@@ -88,7 +76,7 @@ elif menu == "Cadastrar Profissional":
     endereco = st.text_input("Endereço")
     servico = st.selectbox("Serviço", ["Fisioterapia", "Fonoaudiologia", "Outro"])
 
-    pacientes = st.multiselect("Pacientes Atendidos", pacientes["Nome Completo"].tolist())
+    pacientes = st.multiselect("Pacientes Atendidos", pacientes_df["Nome Completo"].tolist())
 
     if st.button("Salvar Profissional"):
         novo_profissional = {
@@ -100,25 +88,12 @@ elif menu == "Cadastrar Profissional":
         }
         salvar_profissional(novo_profissional)
 
-        # Atualiza os pacientes com o novo profissional
-        for pac in pacientes:
-            idx = pacientes[pacientes["Nome Completo"] == pac].index
-            if not idx.empty:
-                atual = pacientes.at[idx[0], "Profissionais"]
-                if isinstance(atual, str):
-                    atual = atual.split(", ")
-                atual.append(nome)
-                pacientes.at[idx[0], "Profissionais"] = ", ".join(atual)
-        # Salva novamente os dados dos pacientes na planilha
-        for pac in pacientes:
-            salvar_paciente(pacientes.loc[pacientes["Nome Completo"] == pac].iloc[0].to_dict())
-
 # Buscar Paciente
 elif menu == "Buscar Paciente":
     st.subheader("Buscar Paciente")
     nome = st.text_input("Digite o nome do paciente")
     if st.button("Buscar"):
-        resultados = pacientes[pacientes['Nome Completo'].str.contains(nome, case=False)]
+        resultados = pacientes_df[pacientes_df['Nome Completo'].str.contains(nome, case=False, na=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
@@ -129,7 +104,7 @@ elif menu == "Buscar Profissional":
     st.subheader("Buscar Profissional")
     nome = st.text_input("Digite o nome do profissional")
     if st.button("Buscar"):
-        resultados = profissionais[profissionais['Nome Completo'].str.contains(nome, case=False)]
+        resultados = profissionais_df[profissionais_df['Nome Completo'].str.contains(nome, case=False, na=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
@@ -138,8 +113,8 @@ elif menu == "Buscar Profissional":
 # Vincular Paciente e Profissional
 elif menu == "Vincular Paciente e Profissional":
     st.subheader("Vincular Paciente e Profissional")
-    paciente = st.selectbox("Escolha um paciente", pacientes["Nome Completo"].tolist())
-    profissional = st.selectbox("Escolha um profissional", profissionais["Nome Completo"].tolist())
+    paciente = st.selectbox("Escolha um paciente", pacientes_df["Nome Completo"].tolist())
+    profissional = st.selectbox("Escolha um profissional", profissionais_df["Nome Completo"].tolist())
     data = st.date_input("Data do Atendimento")
     periodo = st.selectbox("Período", ["Manhã", "Tarde", "Noite"])
 
@@ -155,6 +130,6 @@ elif menu == "Vincular Paciente e Profissional":
 # Mostrar Vínculos atuais
 st.subheader("Vínculos Atuais")
 st.write("**Pacientes**")
-st.dataframe(pacientes)
+st.dataframe(pacientes_df)
 st.write("**Profissionais**")
-st.dataframe(profissionais)
+st.dataframe(profissionais_df)
