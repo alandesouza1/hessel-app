@@ -1,30 +1,48 @@
-# app.py
 import streamlit as st
 import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Inicializa as tabelas em sessão se ainda não existirem
-if 'pacientes' not in st.session_state:
-    st.session_state.pacientes = pd.DataFrame(columns=[
-        'Nome Completo', 'Telefone', 'Endereço', 'Responsável Familiar', 'Contato Responsável', 'Operação', 'Profissionais']
-    )
+# Configuração do Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+credentials = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+client = gspread.authorize(credentials)
 
-if 'profissionais' not in st.session_state:
-    st.session_state.profissionais = pd.DataFrame(columns=[
-        'Nome Completo', 'Telefone', 'Endereço', 'Serviço', 'Pacientes']
-    )
+# Conectar à planilha do Google Sheets
+spreadsheet = client.open("hessel-consulta")
+pacientes_sheet = spreadsheet.worksheet("Pacientes")
+profissionais_sheet = spreadsheet.worksheet("Profissionais")
+vinculos_sheet = spreadsheet.worksheet("Vinculos")
 
+# Inicializa as tabelas com os dados da planilha
+def carregar_dados():
+    pacientes = pd.DataFrame(pacientes_sheet.get_all_records())
+    profissionais = pd.DataFrame(profissionais_sheet.get_all_records())
+    vinculos = pd.DataFrame(vinculos_sheet.get_all_records())
+    return pacientes, profissionais, vinculos
+
+pacientes, profissionais, vinculos = carregar_dados()
+
+# Função para salvar os dados na planilha
+def salvar_paciente(paciente):
+    pacientes_sheet.append_row([paciente["Nome Completo"], paciente["Telefone"], paciente["Endereço"],
+                                paciente["Responsável Familiar"], paciente["Contato Responsável"], paciente["Operação"],
+                                ", ".join(paciente["Profissionais"])])
+    st.success("Paciente salvo com sucesso!")
+
+def salvar_profissional(profissional):
+    profissionais_sheet.append_row([profissional["Nome Completo"], profissional["Telefone"], profissional["Endereço"],
+                                   profissional["Serviço"], ", ".join(profissional["Pacientes"])])
+    st.success("Profissional salvo com sucesso!")
+
+def salvar_vinculo(vinculo):
+    vinculos_sheet.append_row([vinculo["Paciente"], vinculo["Profissional"], vinculo["Data"], vinculo["Período"]])
+    st.success("Vínculo salvo com sucesso!")
+
+# Interface do Streamlit
 st.title("Sistema de Cadastro - Pacientes e Profissionais")
 
-menu = st.sidebar.selectbox("Escolha uma opção", ["Cadastrar Paciente", "Cadastrar Profissional", "Buscar Paciente", "Buscar Profissional"])
-
-# Função para mostrar os vínculos
-
-def mostrar_vinculos():
-    st.subheader("Vínculos atuais")
-    st.write("**Pacientes**")
-    st.dataframe(st.session_state.pacientes)
-    st.write("**Profissionais**")
-    st.dataframe(st.session_state.profissionais)
+menu = st.sidebar.selectbox("Escolha uma opção", ["Cadastrar Paciente", "Cadastrar Profissional", "Buscar Paciente", "Buscar Profissional", "Vincular Paciente e Profissional"])
 
 # Cadastro de Paciente
 if menu == "Cadastrar Paciente":
@@ -36,10 +54,10 @@ if menu == "Cadastrar Paciente":
     contato_resp = st.text_input("Contato do Responsável")
     operacao = st.selectbox("Operação", ["Labi", "AssistCare", "Outra"])
 
-    profissionais = st.multiselect("Profissionais Responsáveis", st.session_state.profissionais['Nome Completo'].tolist())
+    profissionais = st.multiselect("Profissionais Responsáveis", profissionais["Nome Completo"].tolist())
 
     if st.button("Salvar Paciente"):
-        novo = {
+        novo_paciente = {
             'Nome Completo': nome,
             'Telefone': telefone,
             'Endereço': endereco,
@@ -48,17 +66,20 @@ if menu == "Cadastrar Paciente":
             'Operação': operacao,
             'Profissionais': profissionais
         }
-        st.session_state.pacientes = pd.concat([st.session_state.pacientes, pd.DataFrame([novo])], ignore_index=True)
+        salvar_paciente(novo_paciente)
 
+        # Atualiza os profissionais com o novo paciente
         for prof in profissionais:
-            idx = st.session_state.profissionais[st.session_state.profissionais['Nome Completo'] == prof].index
+            idx = profissionais[profissionais["Nome Completo"] == prof].index
             if not idx.empty:
-                atual = st.session_state.profissionais.at[idx[0], 'Pacientes']
-                if not isinstance(atual, list):
-                    atual = []
+                atual = profissionais.at[idx[0], "Pacientes"]
+                if isinstance(atual, str):
+                    atual = atual.split(", ")
                 atual.append(nome)
-                st.session_state.profissionais.at[idx[0], 'Pacientes'] = atual
-        st.success("Paciente salvo com sucesso!")
+                profissionais.at[idx[0], "Pacientes"] = ", ".join(atual)
+        # Salva novamente os dados dos profissionais na planilha
+        for prof in profissionais:
+            salvar_profissional(profissionais.loc[profissionais["Nome Completo"] == prof].iloc[0].to_dict())
 
 # Cadastro de Profissional
 elif menu == "Cadastrar Profissional":
@@ -68,34 +89,37 @@ elif menu == "Cadastrar Profissional":
     endereco = st.text_input("Endereço")
     servico = st.selectbox("Serviço", ["Fisioterapia", "Fonoaudiologia", "Outro"])
 
-    pacientes = st.multiselect("Pacientes Atendidos", st.session_state.pacientes['Nome Completo'].tolist())
+    pacientes = st.multiselect("Pacientes Atendidos", pacientes["Nome Completo"].tolist())
 
     if st.button("Salvar Profissional"):
-        novo = {
+        novo_profissional = {
             'Nome Completo': nome,
             'Telefone': telefone,
             'Endereço': endereco,
             'Serviço': servico,
             'Pacientes': pacientes
         }
-        st.session_state.profissionais = pd.concat([st.session_state.profissionais, pd.DataFrame([novo])], ignore_index=True)
+        salvar_profissional(novo_profissional)
 
+        # Atualiza os pacientes com o novo profissional
         for pac in pacientes:
-            idx = st.session_state.pacientes[st.session_state.pacientes['Nome Completo'] == pac].index
+            idx = pacientes[pacientes["Nome Completo"] == pac].index
             if not idx.empty:
-                atual = st.session_state.pacientes.at[idx[0], 'Profissionais']
-                if not isinstance(atual, list):
-                    atual = []
+                atual = pacientes.at[idx[0], "Profissionais"]
+                if isinstance(atual, str):
+                    atual = atual.split(", ")
                 atual.append(nome)
-                st.session_state.pacientes.at[idx[0], 'Profissionais'] = atual
-        st.success("Profissional salvo com sucesso!")
+                pacientes.at[idx[0], "Profissionais"] = ", ".join(atual)
+        # Salva novamente os dados dos pacientes na planilha
+        for pac in pacientes:
+            salvar_paciente(pacientes.loc[pacientes["Nome Completo"] == pac].iloc[0].to_dict())
 
 # Buscar Paciente
 elif menu == "Buscar Paciente":
     st.subheader("Buscar Paciente")
     nome = st.text_input("Digite o nome do paciente")
     if st.button("Buscar"):
-        resultados = st.session_state.pacientes[st.session_state.pacientes['Nome Completo'].str.contains(nome, case=False)]
+        resultados = pacientes[pacientes['Nome Completo'].str.contains(nome, case=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
@@ -106,10 +130,32 @@ elif menu == "Buscar Profissional":
     st.subheader("Buscar Profissional")
     nome = st.text_input("Digite o nome do profissional")
     if st.button("Buscar"):
-        resultados = st.session_state.profissionais[st.session_state.profissionais['Nome Completo'].str.contains(nome, case=False)]
+        resultados = profissionais[profissionais['Nome Completo'].str.contains(nome, case=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
             st.warning("Profissional não encontrado.")
 
-mostrar_vinculos()
+# Vincular Paciente e Profissional
+elif menu == "Vincular Paciente e Profissional":
+    st.subheader("Vincular Paciente e Profissional")
+    paciente = st.selectbox("Escolha um paciente", pacientes["Nome Completo"].tolist())
+    profissional = st.selectbox("Escolha um profissional", profissionais["Nome Completo"].tolist())
+    data = st.date_input("Data do Atendimento")
+    periodo = st.selectbox("Período", ["Manhã", "Tarde", "Noite"])
+
+    if st.button("Salvar Vinculo"):
+        vinculo = {
+            'Paciente': paciente,
+            'Profissional': profissional,
+            'Data': str(data),
+            'Período': periodo
+        }
+        salvar_vinculo(vinculo)
+
+# Mostrar Vínculos atuais
+st.subheader("Vínculos Atuais")
+st.write("**Pacientes**")
+st.dataframe(pacientes)
+st.write("**Profissionais**")
+st.dataframe(profissionais)
