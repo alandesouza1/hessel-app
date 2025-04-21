@@ -8,7 +8,7 @@ credentials = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_s
 gc = gspread.authorize(credentials)
 
 # Conectar à planilha do Google Sheets
-spreadsheet = client.open("hessel-consulta")
+spreadsheet = gc.open("hessel-consulta")
 pacientes_sheet = spreadsheet.worksheet("Pacientes")
 profissionais_sheet = spreadsheet.worksheet("Profissionais")
 vinculos_sheet = spreadsheet.worksheet("Vinculos")
