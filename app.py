@@ -1,7 +1,7 @@
 import streamlit as st
 import gspread
-import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
+import pandas as pd
 
 # Autenticação com a API do Google Sheets
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -23,26 +23,41 @@ def carregar_dados():
 
 pacientes_df, profissionais_df, vinculos_df = carregar_dados()
 
-# Função para salvar os dados na planilha
-def salvar_paciente(paciente):
-    pacientes_sheet.append_row([paciente["Nome Completo"], paciente["Telefone"], paciente["Endereço"],
-                                paciente["Responsável Familiar"], paciente["Contato Responsável"], paciente["Operação"],
-                                ", ".join(paciente["Profissionais"])])
-    st.success("Paciente salvo com sucesso!")
-
-def salvar_profissional(profissional):
-    profissionais_sheet.append_row([profissional["Nome Completo"], profissional["Telefone"], profissional["Endereço"],
-                                   profissional["Serviço"], ", ".join(profissional["Pacientes"])])
-    st.success("Profissional salvo com sucesso!")
-
-def salvar_vinculo(vinculo):
-    vinculos_sheet.append_row([vinculo["Paciente"], vinculo["Profissional"], vinculo["Data"], vinculo["Período"]])
-    st.success("Vínculo salvo com sucesso!")
+# 👀 Debug: Ver colunas da aba profissionais
+st.write("Colunas de profissionais_df:", profissionais_df.columns.tolist())
 
 # Interface do Streamlit
 st.title("Sistema de Cadastro - Pacientes e Profissionais")
 
-menu = st.sidebar.selectbox("Escolha uma opção", ["Cadastrar Paciente", "Cadastrar Profissional", "Buscar Paciente", "Buscar Profissional", "Vincular Paciente e Profissional"])
+menu = st.sidebar.selectbox("Escolha uma opção", [
+    "Cadastrar Paciente", 
+    "Cadastrar Profissional", 
+    "Buscar Paciente", 
+    "Buscar Profissional", 
+    "Vincular Paciente e Profissional"
+])
+
+# Funções para salvar dados
+def salvar_paciente(paciente):
+    pacientes_sheet.append_row([
+        paciente["Nome Completo"], paciente["Telefone"], paciente["Endereço"],
+        paciente["Responsável Familiar"], paciente["Contato Responsável"], paciente["Operação"],
+        ", ".join(paciente["Profissionais"])
+    ])
+    st.success("Paciente salvo com sucesso!")
+
+def salvar_profissional(profissional):
+    profissionais_sheet.append_row([
+        profissional["Nome Completo"], profissional["Telefone"], profissional["Endereço"],
+        profissional["Serviço"], ", ".join(profissional["Pacientes"])
+    ])
+    st.success("Profissional salvo com sucesso!")
+
+def salvar_vinculo(vinculo):
+    vinculos_sheet.append_row([
+        vinculo["Paciente"], vinculo["Profissional"], vinculo["Data"], vinculo["Período"]
+    ])
+    st.success("Vínculo salvo com sucesso!")
 
 # Cadastro de Paciente
 if menu == "Cadastrar Paciente":
@@ -93,7 +108,7 @@ elif menu == "Buscar Paciente":
     st.subheader("Buscar Paciente")
     nome = st.text_input("Digite o nome do paciente")
     if st.button("Buscar"):
-        resultados = pacientes_df[pacientes_df['Nome Completo'].str.contains(nome, case=False, na=False)]
+        resultados = pacientes_df[pacientes_df['Nome Completo'].str.contains(nome, case=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
@@ -104,7 +119,7 @@ elif menu == "Buscar Profissional":
     st.subheader("Buscar Profissional")
     nome = st.text_input("Digite o nome do profissional")
     if st.button("Buscar"):
-        resultados = profissionais_df[profissionais_df['Nome Completo'].str.contains(nome, case=False, na=False)]
+        resultados = profissionais_df[profissionais_df['Nome Completo'].str.contains(nome, case=False)]
         if not resultados.empty:
             st.dataframe(resultados)
         else:
